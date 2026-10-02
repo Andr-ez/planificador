@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreSubjectRequest;
 use App\Models\Subject;
+use App\Services\StudyPlannerService;
 use Illuminate\Http\JsonResponse;
 
 class SubjectController extends Controller

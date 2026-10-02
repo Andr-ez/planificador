@@ -63,6 +63,7 @@ class TaskController extends Controller
     {
         $taskItem = DB::transaction(function () use ($taskItem): TaskItem {
             $task = Task::query()->lockForUpdate()->findOrFail($taskItem->task_id);
+            $taskItem = TaskItem::query()->lockForUpdate()->findOrFail($taskItem->id);
 
             $taskItem->update(['is_completed' => ! $taskItem->is_completed]);
             $this->synchronizeStatus($task);
@@ -76,7 +77,7 @@ class TaskController extends Controller
     public function addItem(Request $request, Task $task): JsonResponse
     {
         $validated = $request->validate([
-            'description' => ['required', 'string'],
+            'description' => ['required', 'string', 'max:255'],
         ]);
 
         $taskItem = DB::transaction(function () use ($task, $validated): TaskItem {
