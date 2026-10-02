@@ -4,18 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreSubjectRequest;
 use App\Models\Subject;
-use App\Services\StudyPlannerService;
 use Illuminate\Http\JsonResponse;
 
 class SubjectController extends Controller
 {
-    public function index(StudyPlannerService $studyPlannerService): JsonResponse
+    public function index(): JsonResponse
     {
         $subjects = Subject::query()
             ->withSum('studySessions', 'duration_minutes')
             ->get()
-            ->each(function (Subject $subject) use ($studyPlannerService): void {
-                $subject->setAttribute('progress', $studyPlannerService->calculateProgress($subject));
+            ->each(function (Subject $subject): void {
                 $subject->makeHidden('study_sessions_sum_duration_minutes');
             });
 

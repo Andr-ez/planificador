@@ -30,7 +30,8 @@ class TaskControllerTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonPath('title', 'Repasar álgebra')
-            ->assertJsonCount(2, 'task_items');
+            ->assertJsonCount(2, 'task_items')
+            ->assertJsonPath('progress', 100);
 
         $this->assertDatabaseHas('tasks', [
             'subject_id' => $subject->id,
@@ -65,13 +66,18 @@ class TaskControllerTest extends TestCase
 
         $this->patchJson("/api/task-items/{$firstItem->id}/toggle")
             ->assertOk()
+            ->assertJsonPath('id', $firstItem->id)
             ->assertJsonPath('is_completed', true);
 
         $this->assertDatabaseHas('tasks', ['id' => $task->id, 'status' => 'completed']);
 
         $this->patchJson("/api/task-items/{$secondItem->id}/toggle")
             ->assertOk()
+            ->assertJsonPath('id', $secondItem->id)
             ->assertJsonPath('is_completed', false);
+
+        $this->getJson("/api/subjects/{$subject->id}/tasks")
+            ->assertJsonPath('0.progress', 50);
 
         $this->assertDatabaseHas('tasks', ['id' => $task->id, 'status' => 'pending']);
     }
@@ -108,6 +114,25 @@ class TaskControllerTest extends TestCase
             'is_completed' => false,
         ]);
         $this->assertDatabaseHas('tasks', ['id' => $task->id, 'status' => 'pending']);
+    }
+
+    public function test_returns_zero_progress_for_a_task_without_items(): void
+    {
+        $subject = Subject::query()->create([
+            'name' => 'Historia',
+            'credits' => 2,
+        ]);
+        $task = Task::query()->create([
+            'subject_id' => $subject->id,
+            'title' => 'Definir tema',
+            'due_date' => '2026-10-03 10:00:00',
+            'status' => 'pending',
+        ]);
+
+        $this->getJson("/api/subjects/{$subject->id}/tasks")
+            ->assertOk()
+            ->assertJsonPath('0.id', $task->id)
+            ->assertJsonPath('0.progress', 0);
     }
 
     public function test_returns_422_when_an_item_description_is_missing(): void

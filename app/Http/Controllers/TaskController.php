@@ -20,6 +20,7 @@ class TaskController extends Controller
             ->latest('due_date')
             ->get()
             ->each(function (Task $task) use ($cutoff): void {
+                $task->setAttribute('progress', $this->calculateProgress($task));
                 $task->setAttribute('is_inactive', $task->status === 'pending'
                     && $task->due_date->isFuture()
                     && $task->updated_at->lte($cutoff)
@@ -55,7 +56,7 @@ class TaskController extends Controller
             return $task;
         });
 
-        return response()->json($task->load('taskItems'), 201);
+        return response()->json($this->withProgress($task->load('taskItems')), 201);
     }
 
     public function toggle(TaskItem $taskItem): JsonResponse
@@ -95,10 +96,31 @@ class TaskController extends Controller
 
     private function synchronizeStatus(Task $task): void
     {
-        $status = $task->taskItems()
+        $hasItems = $task->taskItems()->exists();
+        $hasIncompleteItems = $task->taskItems()
             ->where('is_completed', false)
-            ->exists() ? 'pending' : 'completed';
+            ->exists();
+        $status = $hasItems && ! $hasIncompleteItems ? 'completed' : 'pending';
 
         $task->update(['status' => $status]);
+    }
+
+    private function calculateProgress(Task $task): float
+    {
+        $totalItems = $task->taskItems->count();
+
+        if ($totalItems === 0) {
+            return 0.0;
+        }
+
+        return round(($task->taskItems->where('is_completed', true)->count() / $totalItems) * 100, 2);
+    }
+
+    private function withProgress(Task $task): Task
+    {
+        $task->loadMissing('taskItems');
+        $task->setAttribute('progress', $this->calculateProgress($task));
+
+        return $task;
     }
 }
