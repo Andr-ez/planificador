@@ -52,6 +52,7 @@ const initDashboard = () => {
     const modal = root.querySelector('[data-subject-modal]');
     const form = root.querySelector('[data-subject-form]');
     const errors = root.querySelector('[data-form-errors]');
+    let isSubmitting = false;
     const openModal = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); form.elements.name.focus(); };
     const closeModal = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); form.reset(); errors.classList.add('hidden'); };
     root.querySelectorAll('[data-open-subject-modal]').forEach((button) => button.addEventListener('click', openModal));
@@ -68,7 +69,9 @@ const initDashboard = () => {
     });
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (isSubmitting) return;
         const button = form.querySelector('[type="submit"]');
+        isSubmitting = true;
         button.disabled = true;
         errors.classList.add('hidden');
         try {
@@ -80,7 +83,10 @@ const initDashboard = () => {
         } catch (error) {
             errors.textContent = validationMessage(error);
             errors.classList.remove('hidden');
-        } finally { button.disabled = false; }
+        } finally {
+            isSubmitting = false;
+            button.disabled = false;
+        }
     });
 };
 
@@ -111,12 +117,23 @@ const initSubjectDetail = async () => {
             try { await api.request(`task-items/${checkbox.dataset.toggleItem}/toggle`, { method: 'PATCH', body: '{}' }); window.location.reload(); }
             catch (error) { checkbox.checked = !checkbox.checked; showMessage(message, error.message, true); checkbox.disabled = false; }
         }));
-        list.querySelectorAll('[data-add-item-form]').forEach((itemForm) => itemForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const task = itemForm.closest('[data-task-id]');
-            try { await api.request(`tasks/${task.dataset.taskId}/items`, { method: 'POST', body: JSON.stringify({ description: itemForm.elements.description.value }) }); window.location.reload(); }
-            catch (error) { showMessage(message, error.message, true); }
-        }));
+        list.querySelectorAll('[data-add-item-form]').forEach((itemForm) => {
+            let isSubmitting = false;
+            itemForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                if (isSubmitting) return;
+                const button = itemForm.querySelector('button');
+                isSubmitting = true;
+                button.disabled = true;
+                const task = itemForm.closest('[data-task-id]');
+                try { await api.request(`tasks/${task.dataset.taskId}/items`, { method: 'POST', body: JSON.stringify({ description: itemForm.elements.description.value }) }); window.location.reload(); }
+                catch (error) { showMessage(message, error.message, true); }
+                finally {
+                    isSubmitting = false;
+                    button.disabled = false;
+                }
+            });
+        });
     };
     try {
         const subjects = await api.request('subjects');
@@ -130,6 +147,7 @@ const initSubjectDetail = async () => {
     finally { loading.classList.add('hidden'); }
     const panel = root.querySelector('[data-task-form-panel]');
     const itemList = root.querySelector('[data-task-items]');
+    let isSubmitting = false;
     const addItem = () => { itemList.insertAdjacentHTML('beforeend', '<input name="task_items[]" required maxlength="255" placeholder="Descripción del ítem" class="w-full rounded-lg border-slate-300 px-3 py-2 text-sm">'); };
     root.querySelector('[data-open-task-form]').addEventListener('click', () => { panel.classList.remove('hidden'); if (!itemList.children.length) addItem(); });
     root.querySelector('[data-close-task-form]').addEventListener('click', () => panel.classList.add('hidden'));
@@ -137,11 +155,19 @@ const initSubjectDetail = async () => {
     root.querySelector('[data-task-form]').addEventListener('submit', async (event) => {
         event.preventDefault();
         const form = event.currentTarget;
+        if (isSubmitting) return;
+        isSubmitting = true;
+        const button = form.querySelector('[type="submit"]');
+        button.disabled = true;
         const errorBox = form.querySelector('[data-task-form-errors]');
         try {
             await api.request(`subjects/${id}/tasks`, { method: 'POST', body: JSON.stringify({ title: form.elements.title.value, due_date: form.elements.due_date.value, task_items: [...itemList.querySelectorAll('input')].map((input) => ({ description: input.value })) }) });
             window.location.reload();
         } catch (error) { errorBox.textContent = validationMessage(error); errorBox.classList.remove('hidden'); }
+        finally {
+            isSubmitting = false;
+            button.disabled = false;
+        }
     });
 };
 
