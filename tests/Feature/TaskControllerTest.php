@@ -173,4 +173,26 @@ class TaskControllerTest extends TestCase
 
         $this->assertDatabaseCount('task_items', 0);
     }
+
+    public function test_returns_422_when_an_item_description_is_too_long(): void
+    {
+        $subject = Subject::query()->create([
+            'name' => 'Arte',
+            'credits' => 2,
+        ]);
+        $task = Task::query()->create([
+            'subject_id' => $subject->id,
+            'title' => 'Preparar presentación',
+            'due_date' => '2026-10-03 10:00:00',
+            'status' => 'pending',
+        ]);
+
+        $this->postJson("/api/tasks/{$task->id}/items", [
+            'description' => str_repeat('a', 256),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['description']);
+
+        $this->assertDatabaseCount('task_items', 0);
+    }
 }
