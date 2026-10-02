@@ -11,6 +11,26 @@ use Illuminate\Support\Facades\DB;
 
 class TaskController extends Controller
 {
+    public function index(Subject $subject): JsonResponse
+    {
+        $cutoff = now()->subDays(3);
+
+        $tasks = $subject->tasks()
+            ->with('taskItems')
+            ->latest('due_date')
+            ->get()
+            ->each(function (Task $task) use ($cutoff): void {
+                $task->setAttribute('is_inactive', $task->status === 'pending'
+                    && $task->due_date->isFuture()
+                    && $task->updated_at->lte($cutoff)
+                    && ! $task->taskItems->contains(
+                        fn (TaskItem $item): bool => $item->updated_at->gt($cutoff),
+                    ));
+            });
+
+        return response()->json($tasks);
+    }
+
     public function store(Request $request, Subject $subject): JsonResponse
     {
         $validated = $request->validate([
