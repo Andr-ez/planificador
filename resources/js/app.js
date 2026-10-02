@@ -81,18 +81,21 @@ const initDashboard = () => {
     });
 };
 
-const taskCard = (task) => {
+const taskCard = (task, expanded = false) => {
     const progress = Math.min(100, Math.max(0, Number(task.progress || 0)));
+    const panelId = `task-items-${task.id}`;
 
     return `<article class="rounded-xl border ${task.is_inactive ? 'border-amber-300' : 'border-slate-200'} bg-white p-5 shadow-sm" data-task-id="${task.id}">
     ${task.is_inactive ? '<div class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">Atención: esta tarea no registra avances desde hace más de 3 días.</div>' : ''}
     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div><h2 class="font-semibold">${escapeHtml(task.title)}</h2><p class="mt-1 text-sm text-slate-500">Límite: ${formatDate(task.due_date)}</p></div>
+        <div class="flex min-w-0 items-start gap-3"><button type="button" data-toggle-task aria-controls="${panelId}" aria-expanded="${expanded}" class="mt-0.5 rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700" aria-label="${expanded ? 'Ocultar' : 'Mostrar'} ítems de ${escapeHtml(task.title)}"><span aria-hidden="true">${expanded ? '&#9660;' : '&#9654;'}</span></button><div><h2 class="font-semibold">${escapeHtml(task.title)}</h2><p class="mt-1 text-sm text-slate-500">Límite: ${formatDate(task.due_date)}</p></div></div>
         <span class="w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${task.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}">${task.status === 'completed' ? 'Completada' : 'Pendiente'}</span>
     </div>
     <div class="mt-5"><div class="flex items-center justify-between text-xs font-medium text-slate-500"><span>Progreso</span><span>${progress.toFixed(0)}%</span></div><div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-indigo-600 transition-all" style="width:${progress}%"></div></div></div>
-    <ul class="mt-5 space-y-2 border-t border-slate-100 pt-4">${(task.task_items || []).map((item) => `<li><label class="flex items-center gap-3 text-sm ${item.is_completed ? 'text-slate-400 line-through' : 'text-slate-700'}"><input type="checkbox" data-toggle-item="${item.id}" ${item.is_completed ? 'checked' : ''} class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"><span>${escapeHtml(item.description)}</span></label></li>`).join('')}</ul>
-    <form data-add-item-form class="mt-4 flex gap-2"><input name="description" required placeholder="Añadir ítem" class="min-w-0 flex-1 rounded-lg border-slate-300 px-3 py-2 text-sm"><button class="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Añadir</button></form>
+    <div id="${panelId}" data-task-items-panel class="${expanded ? '' : 'hidden'} mt-5 border-t border-slate-100 pt-4">
+        <ul class="space-y-2">${(task.task_items || []).map((item) => `<li><label class="flex items-center gap-3 text-sm ${item.is_completed ? 'text-slate-400 line-through' : 'text-slate-700'}"><input type="checkbox" data-toggle-item="${item.id}" ${item.is_completed ? 'checked' : ''} class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"><span>${escapeHtml(item.description)}</span></label></li>`).join('')}</ul>
+        <form data-add-item-form class="mt-4 flex gap-2"><input name="description" required maxlength="255" placeholder="Añadir ítem" class="min-w-0 flex-1 rounded-lg border-slate-300 px-3 py-2 text-sm"><button class="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Añadir ítem</button></form>
+    </div>
 </article>`;
 };
 
@@ -105,18 +108,27 @@ const initSubjectDetail = async () => {
     const empty = root.querySelector('[data-tasks-empty]');
     const message = root.querySelector('[data-task-message]');
     let tasks = [];
+    const expandedTasks = new Set();
+    const loadTasks = async () => { tasks = await api.request(`subjects/${id}/tasks`); };
     const renderTasks = () => {
         empty.classList.toggle('hidden', tasks.length > 0);
-        list.innerHTML = tasks.map(taskCard).join('');
+        list.innerHTML = tasks.map((task) => taskCard(task, expandedTasks.has(String(task.id)))).join('');
+        list.querySelectorAll('[data-toggle-task]').forEach((button) => button.addEventListener('click', () => {
+            const task = button.closest('[data-task-id]');
+            const taskId = task.dataset.taskId;
+            if (expandedTasks.has(taskId)) expandedTasks.delete(taskId);
+            else expandedTasks.add(taskId);
+            renderTasks();
+        }));
         list.querySelectorAll('[data-toggle-item]').forEach((checkbox) => checkbox.addEventListener('change', async () => {
             checkbox.disabled = true;
-            try { await api.request(`task-items/${checkbox.dataset.toggleItem}/toggle`, { method: 'PATCH', body: '{}' }); window.location.reload(); }
+            try { await api.request(`task-items/${checkbox.dataset.toggleItem}/toggle`, { method: 'PATCH', body: '{}' }); await loadTasks(); renderTasks(); }
             catch (error) { checkbox.checked = !checkbox.checked; showMessage(message, error.message, true); checkbox.disabled = false; }
         }));
         list.querySelectorAll('[data-add-item-form]').forEach((itemForm) => itemForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             const task = itemForm.closest('[data-task-id]');
-            try { await api.request(`tasks/${task.dataset.taskId}/items`, { method: 'POST', body: JSON.stringify({ description: itemForm.elements.description.value }) }); window.location.reload(); }
+            try { await api.request(`tasks/${task.dataset.taskId}/items`, { method: 'POST', body: JSON.stringify({ description: itemForm.elements.description.value }) }); await loadTasks(); renderTasks(); }
             catch (error) { showMessage(message, error.message, true); }
         }));
     };
@@ -126,7 +138,7 @@ const initSubjectDetail = async () => {
         if (!subject) throw new Error('No se encontró la materia.');
         root.querySelector('[data-subject-name]').textContent = subject.name;
         root.querySelector('[data-subject-meta]').textContent = `${subject.credits} créditos · ${Number(subject.total_hours_required || 0)} horas de estudio objetivo`;
-        tasks = await api.request(`subjects/${id}/tasks`);
+        await loadTasks();
         renderTasks();
     } catch (error) { showMessage(message, error.message, true); }
     finally { loading.classList.add('hidden'); }

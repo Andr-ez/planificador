@@ -12,6 +12,25 @@ class TaskControllerTest extends TestCase
 {
     use LazilyRefreshDatabase;
 
+    public function test_subject_detail_resolves_the_subject_model_for_the_view(): void
+    {
+        $subject = Subject::query()->create([
+            'name' => 'Literatura',
+            'credits' => 2,
+        ]);
+
+        $this->get("/subjects/{$subject->id}")
+            ->assertOk()
+            ->assertViewIs('subjects.show')
+            ->assertViewHas('subject', $subject);
+    }
+
+    public function test_subject_detail_returns_not_found_for_an_unknown_subject(): void
+    {
+        $this->get('/subjects/999999')
+            ->assertNotFound();
+    }
+
     public function test_creates_a_task_with_its_initial_items_and_marks_it_completed_when_all_are_completed(): void
     {
         $subject = Subject::query()->create([
